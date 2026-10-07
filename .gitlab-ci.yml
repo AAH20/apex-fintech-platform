@@ -1,0 +1,107 @@
+# GitLab CI/CD Pipeline for Apex Fintech Platform
+# Stages: build → test → security_scan → deploy
+
+stages:
+  - build
+  - test
+  - security_scan
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_IMAGE: "$CI_REGISTRY_IMAGE/apex-fintech-platform"
+  DOCKER_TAG: "$CI_COMMIT_SHORT_SHA"
+
+# ── Cache ──────────────────────────────────────────────────────────
+cache:
+  paths:
+    - .cache/pip
+    - .pytest_cache
+
+# ── Build ──────────────────────────────────────────────────────────
+build:
+  stage: build
+  image: python:3.12-slim
+  script:
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+    - python -c "import src.devops.engine; print('Build OK')"
+  artifacts:
+    paths:
+      - src/
+    expire_in: 1 hour
+
+# ── Test ───────────────────────────────────────────────────────────
+test:
+  stage: test
+  image: python:3.12-slim
+  needs: [build]
+  script:
+    - pip install -e ".[dev]"
+    - python -m pytest tests/ -v --tb=short --junitxml=report.xml --cov=src --cov-report=xml --cov-report=term
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+      - report.xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+
+# ── Security Scan ──────────────────────────────────────────────────
+security_scan:
+  stage: security_scan
+  image: python:3.12-slim
+  needs: [test]
+  script:
+    - pip install bandit safety
+    - bandit -r src/ -f json -o bandit-report.json || true
+    - bandit -r src/ -ll
+    - safety check --json --output safety-report.json || true
+  artifacts:
+    when: always
+    paths:
+      - bandit-report.json
+      - safety-report.json
+    expire_in: 30 days
+  allow_failure: true
+
+# ── Deploy to Staging ──────────────────────────────────────────────
+deploy_staging:
+  stage: deploy
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  needs: [security_scan]
+  environment:
+    name: staging
+    url: https://staging.apex-fintech.example.com
+  only:
+    - develop
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $DOCKER_IMAGE:staging-$DOCKER_TAG -f Dockerfile .
+    - docker push $DOCKER_IMAGE:staging-$DOCKER_TAG
+    - echo "Deployed to staging: $DOCKER_TAG"
+
+# ── Deploy to Production ───────────────────────────────────────────
+deploy_production:
+  stage: deploy
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  needs: [security_scan]
+  environment:
+    name: production
+    url: https://apex-fintech.example.com
+  only:
+    - main
+  when: manual
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $DOCKER_IMAGE:prod-$DOCKER_TAG -f Dockerfile .
+    - docker push $DOCKER_IMAGE:prod-$DOCKER_TAG
+    - echo "Deployed to production: $DOCKER_TAG"

@@ -1,0 +1,7 @@
+numpy>=1.24
+web3>=6.0.0
+eth-account>=0.8.0
+
+[dev]
+pytest>=7
+ruff==0.8.4

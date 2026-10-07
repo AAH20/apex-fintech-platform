@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: apex-fintech-platform
+Version: 0.1.0
+Summary: Market making engine with Avellaneda-Stoikov framework
+Requires-Python: >=3.10
+Requires-Dist: numpy>=1.24
+Requires-Dist: web3>=6.0.0
+Requires-Dist: eth-account>=0.8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: ruff==0.8.4; extra == "dev"
