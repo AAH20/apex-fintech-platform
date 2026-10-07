@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en" dir="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apex Fintech Platform — Dashboard</title>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --color-primary: #00d4ff;
+      --color-secondary: #8b5cff;
+      --color-bg: #0d1b2e;
+      --color-card: #142236;
+      --color-text: #ffffff;
+      --color-muted: #b0b0b0;
+      --color-accent: #ff6b6b;
+      --radius: 8px;
+      --shadow: 0 2px 8px rgba(0,0,0,0.1);
+      --shadow-hover: 0 4px 16px rgba(0,0,0,0.2);
+      --border-radius: var(--radius);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { font-family: system-ui, -apple-system, sans-serif; }
+
+    body {
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    /* Layout */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    /* Header */
+    header {
+      padding: 1.5rem 0;
+      border-bottom: 1px solid var(--color-muted);
+      margin-bottom: 2rem;
+    }
+
+    .header-grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo-svg {
+      width: 32px;
+      height: 32px;
+    }
+
+    .brand-title {
+      font-weight: 600;
+      font-size: clamp(1.25rem, 4vw, 1.75rem);
+    }
+
+    /* Nav */
+    nav {
+      margin-top: 0.5rem;
+    }
+
+    .nav-list {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .nav-link {
+      color: var(--color-muted);
+      text-decoration: none;
+      padding: 0.5rem 0.75rem;
+      border-radius: var(--border-radius);
+      font-size: 0.875rem;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .nav-link:hover,
+    .nav-link.active {
+      color: var(--color-text);
+      background: rgba(0, 212, 255, 0.1);
+    }
+
+    /* Cards grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .card {
+      background: var(--color-card);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+    }
+
+    .card-title {
+      font-weight: 500;
+      font-size: 1rem;
+    }
+
+    .card-status {
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-healthy { background: rgba(39, 174, 96, 0.15); color: #27ae60; }
+    .status-warning { background: rgba(230, 126, 34, 0.15); color: #e67e22; }
+    .status-critical { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+
+    /* Metrics */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .metric {
+      text-align: center;
+    }
+
+    .metric-value {
+      font-size: 2rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--color-muted);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      margin-top: 1rem;
+      background: var(--color-card);
+      border-radius: var(--border-radius);
+      padding: 0.25rem;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 0.5rem 0;
+      color: var(--color-muted);
+      text-decoration: none;
+      border-radius: calc(var(--border-radius) - 0.25rem);
+      font-size: 0.875rem;
+      text-align: center;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .tab.active {
+      color: var(--color-text);
+      background: var(--color-primary);
+    }
+
+    /* Reduce motion */
+    @media (prefers-reduced-motion: reduce) {
+      .nav-link { transition: none; }
+      .card { transition: none; }
+      .tab { transition: none; }
+    }
+
+    /* Focus visible */
+    .nav-link:focus-visible,
+    .tab:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="header-grid">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" class="logo-svg" fill="none" stroke="currentColor" stroke-width="1.5">
+            <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/>
+            <circle cx="12" cy="12" r="4"/>
+          </svg>
+          <span class="brand-title">Apex Fintech</span>
+        </div>
+        <nav>
+          <ul class="nav-list">
+            <li><a href="#" class="nav-link active">Dashboard</a></li>
+            <li><a href="#" class="nav-link">Portfolio</a></li>
+            <li><a href="#" class="nav-link">Risk</a></li>
+            <li><a href="#" class="nav-link">Payments</a></li>
+            <li><a href="#" class="nav-link">Advisory</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <!-- Metrics Row -->
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-value" id="total-engines">50</div>
+          <div class="metric-label">Active Engines</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="health-percent">98</div>
+          <div class="metric-label">Health %</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="uptime">99.95</div>
+          <div class="metric-label">Uptime %</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="api-requests">1250</div>
+          <div class="metric-label">API Req/min</div>
+        </div>
+      </div>
+
+      <!-- Cards Grid -->
+      <div class="cards-grid">
+        <!-- Portfolio Card -->
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Portfolio Optimization</h3>
+              <span class="card-status status-healthy">Healthy</span>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <p class="mt-2" style="color: var(--color-muted); font-size: 0.875rem;">
+            Greedy heuristic for 500-asset cardinality-constrained MIQP
+          </p>
+        </article>
+
+        <!-- Risk Card -->
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Risk Aggregation</h3>
+              <span class="card-status status-healthy">Healthy</span>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11l5 5 5-5"/>
+            </svg>
+          </div>
+          <p class="mt-2" style="color: var(--color-muted); font-size: 0.875rem;">
+            VaR/CVaR bounds via independent sum + rearrangement algorithm
+          </p>
+        </article>
+
+        <!-- Payment Card -->
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Payment Routing</h3>
+              <span class="card-status status-healthy">Healthy</span>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </div>
+          <p class="mt-2" style="color: var(--color-muted); font-size: 0.875rem;">
+            Dijkstra + Bellman-Ford, 1000-node graph, 23.78ms avg
+          </p>
+        </article>
+
+        <!-- Market Making Card -->
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Market Making</h3>
+              <span class="card-status status-warning">Near Threshold</span>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+              <line x1="3" y1="11" x2="21" y2="11"/>
+              <path d="M10 11l4 4 4-4"/>
+            </svg>
+          </div>
+          <p class="mt-2" style="color: var(--color-muted); font-size: 0.875rem;">
+            Avellaneda-Stoikov quotes, 1.47ms avg, analytical solution
+          </p>
+        </article>
+
+        <!-- Monte Carlo Card -->
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <h3 class="card-title">Monte Carlo</h3>
+              <span class="card-status status-warning">Near Threshold</span>
+            </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0;">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M8 14l1.5-1.5 3.5 3.5 2.5-2.5"/>
+            </svg>
+          </div>
+          <p class="mt-2" style="color: var(--color-muted); font-size: 0.875rem;">
+            GBM + LSM American options, 10K paths, 22.10ms avg
+          </p>
+        </article>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <a href="#" class="tab active">Overview</a>
+        <a href="#" class="tab">Engines</a>
+        <a href="#" class="tab">Governance</a>
+        <a href="#" class="tab">Performance</a>
+      </div>
+
+      <!-- Governance Panel -->
+      <article class="card" style="margin-top: 2rem;">
+        <h3 style="margin-top: 0; margin-bottom: 1rem;">ISO 42001 Governance</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div>
+            <p style="font-size: 0.875rem; margin-bottom: 0.25rem;">Model Cards</p>
+            <p style="color: var(--color-text); font-weight: 500;" id="model-cards-count">28</p>
+            <p style="font-size: 0.75rem; color: var(--color-muted);">of 28 engines</p>
+          </div>
+          <div>
+            <p style="font-size: 0.875rem; margin-bottom: 0.25rem;">Audit Trail</p>
+            <p style="color: var(--color-text); font-weight: 500;" id="audit-entries">1247</p>
+            <p style="font-size: 0.75rem; color: var(--color-muted);">log entries</p>
+          </div>
+          <div>
+            <p style="font-size: 0.875rem; margin-bottom: 0.25rem;">Evidence Chain</p>
+            <p style="color: var(--color-text); font-weight: 500;" id="evidence-links">892</p>
+            <p style="font-size: 0.75rem; color: var(--color-muted);">linked artifacts</p>
+          </div>
+          <div>
+            <p style="font-size: 0.875rem; margin-bottom: 0.25rem;">Compliance Checks</p>
+            <p style="color: var(--color-text); font-weight: 500;" id="compliance-checks">342</p>
+            <p style="font-size: 0.75rem; color: var(--color-muted);">this session
+</p>
+          </div>
+        </div>
+      </article>
+    </main>
+  </div>
+</body>
+</html>

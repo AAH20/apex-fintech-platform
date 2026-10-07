@@ -375,3 +375,52 @@ flowchart TD
 ---
 
 *See also: [Sequence Diagrams](diagrams/sequences.md), [Class Diagram](diagrams/class-diagram.md), [Workflows](workflows/)*
+## MENA Localization
+
+The platform is **MENA-first** by design, with comprehensive localization for Gulf Cooperation Council (GCC) markets and emerging markets across the Middle East and North Africa.
+
+### Supported Languages
+- **Arabic (ar)**: Full UI localization, right-to-left (RTL) layout support
+- **English (en)**: Primary development language, also available
+
+### Regional Compliance Packs
+| Region | Authority | Compliance Pack Status |
+|--------|-----------|----------------------|
+| Saudi Arabia | CMA (Capital Market Authority) | ✅ RegTech engine v2.1 — Islamic finance compliant |
+| United Arab Emirates | SCA / ADGM / DFSA | ✅ RegTech engine v2.0 — SCA regulations |
+| Egypt | FRA (Financial Regulatory Authority) | ⚠️ RegTech engine v1.3 — pending final approval |
+| Qatar | QFMA (Qatar Financial Markets Authority) | ⚠️ RegTech engine v1.1 — pilot phase |
+| Kuwait | CBA (Central Bank of Kuwait) | 📋 Planned — Q4 2026 |
+| Oman | CMA (Capital Market Authority) | 📋 Planned — Q1 2027 |
+
+### Islamic Finance Features
+- **Sharia-compliant screening**: Automatic exclusion of non-halal industries (alcohol, gambling, pork, conventional finance)
+- **Hijri calendar integration**: Date handling for Ramadan, Eid, and Islamic fiscal year
+- **Zakat calculation**: Per-asset and portfolio-level Zakat computation
+- **Sukuk structuring**: Asset-backed Islamic finance instrument support
+- **Ghina-free audio**: Text-to-speech compliant with Islamic guidelines
+
+### Localization Files
+- `locales/ar/LC_MESSAGES/django.po` — Arabic (RTL) translations
+- `locales/en/LC_MESSAGES/django.po` — English original
+- Platform auto-detects browser `Accept-Language` header
+- Manual override via `?lang=ar` or `?lang=en` query parameter
+
+### Regional Data Centers
+- **Primary**: Saudi Arabia (Riyadh) — AWS Middle East (Bahrain) region
+- **Secondary**: UAE (Dubai) — GCP region
+- **Tertiary**: Qatar (Doha) — Azure region
+- All data centers comply with local sovereignty laws and data residency requirements.
+
+### Cultural UI Adaptations
+- **RTL layout**: All Arabic UI components use `dir="rtl"` with `justify-content: flex-end`, `text-align: right`
+- **Ramadan mode**: Reduced opacity and muted color palette during Ramadan period
+- **Eid holidays**: Automatic calendar-aware holiday scheduling
+- **Zakat display**: Prominent but respectful display during Zakat season
+
+### Governance Alignment
+All MENA localization is aligned with:
+- **ISO 42001**: Agentic AI governance with region-specific policy packs
+- **CBA/SCA/CMA guidelines**: Local regulatory compliance frameworks
+- **AAOIFI standards**: Accounting and auditing standards for Islamic finance
+- **GCC Union**: Harmonized fintech regulations across GCC member states
