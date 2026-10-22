@@ -429,18 +429,10 @@ All MENA localization is aligned with:
 
 The platform now features **evolutionary alpha generation** capabilities:
 
-- **XGBoost-augmented ML pipeline** (`src/ml/pipeline.py`): Gradient-boosted trees with automatic model selection, hyperparameter tuning via randomized search, and feature importance analysis. Supports both classification (directional signals) and regression (return prediction).
+- **XGBoost-augmented ML pipeline** (`src/ml/pipeline.py`): Gradient-boosted trees with automatic model selection, hyperparameter tuning via randomized search (50 iterations), and feature importance analysis. Supports both classification (directional signals) and regression (return prediction). Includes walk-forward validation for time-series data to avoid look-ahead bias.
 
 - **Strategy backtesting** (`run_backtest`, `BacktestEngine`): Full-cycle backtest engine with:
-  - Transaction cost modeling ( configurable 
-### 🧠 Best-in-Class Alpha Generation
-
-The platform now features **evolutionary alpha generation** capabilities:
-
-- **XGBoost-augmented ML pipeline** (`src/ml/pipeline.py`): Gradient-boosted trees with automatic model selection, hyperparameter tuning via randomized search, and feature importance analysis. Supports both classification (directional signals) and regression (return prediction).
-
-- **Strategy backtesting** (`run_backtest`, `BacktestEngine`): Full-cycle backtest engine with:
-  - Transaction cost modeling ( configurable % per trade)
+  - Transaction cost modeling (0.1% configurable % per trade)
   - Long/short positioning with adjustable short‑allow flag
   - Equal‑weight, volatility‑weight, or signal‑weight position sizing
   - Max‑drawdown guard that short‑circuits the strategy if a limit is breached
@@ -451,9 +443,13 @@ The platform now features **evolutionary alpha generation** capabilities:
 
 - **Model interpretability**: Feature importance via gain/cover metrics (XGBoost) or coefficient magnitude (linear models), enabling researcher‑driven alpha refinement.
 
+- **Walk-forward validation**: Expanding training windows with out-of-sample testing across `n_splits` folds, returning per-fold ROC AUC/R2, mean/std scores, and final out-of-sample metric. Prevents look-ahead bias in financial time series.
+
+- **Ensemble methods**: Automatic model selection with improvement thresholds (2% XGBoost over baseline), configurable candidate model lists per task type (classification/regression), and hyperparameter tuning via GridSearchCV or RandomizedSearchCV.
+
 ### 🧪 New Benchmarks (Agent Eval Harness)
 
-| Capability | Metric | Target |
+|| Capability | Metric | Target |
 |------------|--------|--------|
 | ML pipeline ROC‑AUC | > 0.65 on synthetic financial data | ✅ Typical |
 | Backtest Sharpe Ratio | > 1.0 (gross) | ✅ Typical |

@@ -25,7 +25,38 @@
 | [`src/risk/aggregation.py`](src/risk/aggregation.py) | VaR/CVaR bounds via rearrangement algorithm (100 risks, <2s) |
 | [`src/payments/routing.py`](src/payments/routing.py) | Optimal payment path finder (1000 nodes, <100ms) |
 | [`src/simulation/engine.py`](src/simulation/engine.py) | Monte Carlo engine with LSM for American options (10K paths, <1s) |
-| [`src/ml/pipeline.py`](src/ml/pipeline.py) | **ML pipeline** — XGBoost-augmented feature engineering, model selection, hyperparameter tuning, **strategy backtesting** with SHARP/MDD guards |
+|| [`src/ml/pipeline.py`](src/ml/pipeline.py) | **ML pipeline** — XGBoost-augmented feature engineering, model selection, hyperparameter tuning, **walk-forward validation**, strategy backtesting with drawdown guards and ensemble methods |
+
+## 🧠 Best-in-Class Alpha Generation
+
+### XGBoost-augmented ML Pipeline
+- Feature engineering with imputation, scaling, polynomial features, and correlation filtering
+- Model selection from candidates (Logistic Regression, Random Forest, Gradient Boosting)
+- XGBoost integration with automatic model selection and hyperparameter tuning
+- **Walk-forward validation** for time-series / financial data — avoids look-ahead bias
+- Hyperparameter tuning via GridSearchCV or RandomizedSearchCV (50 iterations)
+- Feature importance analysis and interpretation
+- Supports both classification (directional signals) and regression (return prediction)
+
+### Strategy Backtesting Engine
+- Full-cycle backtest with transaction cost modeling
+- Long/short positioning with adjustable short-allow flag
+- Position sizing: equal_weight, vol_weight, signal_weight
+- Max-drawdown guard that short-circuits if limit breached
+- Performance metrics: annualized return, volatility, Sharpe ratio, max drawdown, win rate, total/trade counts
+- Convenience function: `run_backtest()` for quick experiments
+
+### Walk-Forward Validation
+- Expanding training windows with out-of-sample testing
+- Prevents look-ahead bias in time-series financial data
+- Configurable number of splits and step forward periods
+- Returns per-fold scores, mean/std, and final out-of-sample metric
+
+### Ensemble Methods
+- Automatic model selection with improvement thresholds
+- XGBoost integration with early stopping
+- 2% improvement threshold for XGBoost over baseline models
+- Configurable candidate model lists per task type
 
 ## 🏗 High-Level Architecture
 

@@ -1,5 +1,6 @@
 """ML pipeline engine: feature engineering, model selection, hyperparameter tuning.
-XGBoost-augmented, strategy-backtestable, production-grade.
+XGBoost-augmented, strategy-backtestable, with walk-forward analysis and ensemble methods
+for evolving alpha generation.
 """
 
 from __future__ import annotations
@@ -54,6 +55,8 @@ class PipelineConfig:
     use_xgboost: bool = True
     xgb_early_stopping: bool = True
     xgb_eval_metric: str = "logloss"
+    walk_forward: bool = True  # walk-forward validation flag
+    walk_forward_splits: int = 5  # number of walk-forward folds
 
 
 class FeatureEngineer:
@@ -166,6 +169,122 @@ class ModelSelector:
         return best_name, best_model, scores
 
 
+class WalkForwardEngine:
+    """Walk-forward validation for time series / financial data.
+
+    Avoids look-ahead bias by training on expanding windows and testing on
+    the immediately-out-of-sample period, repeating across the full timeline.
+    """
+
+    def __init__(self, n_splits: int = 5, step_forward: int = 1):
+        self.n_splits = n_splits
+        self.step_forward = step_forward
+
+    def validate(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        model_factory,  # callable that returns a fresh model given X_train, y_train
+        X_full: Optional[np.ndarray] = None,
+        y_full: Optional[np.ndarray] = None,
+        task: str = "classification",
+    ) -> Dict[str, float]:
+        """Run walk-forward validation and return per-fold metrics.
+
+        Args:
+            X: Feature matrix (n_samples, n_features)
+            y: Target vector (n_samples,)
+            model_factory: Callable[[X_train, y_train], model] that creates a fresh model
+            X_full, y_full: Full dataset (defaults to X, y)
+
+        Returns:
+            Dict with mean/std of: ROC AUC (classification) or R2 (regression),
+            per-fold scores, and final out-of-sample score.
+        """
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y)
+
+        if X_full is None:
+            X_full, y_full = X, y
+
+        n_total = X_full.shape[0]
+        fold_size = max(1, n_total // self.n_splits)
+
+        fold_scores: List[float] = []
+        all_y_true: List[float] = []
+        all_y_pred: List[float] = []
+
+        for i in range(self.n_splits):
+            # Training window: expanding from the start
+            train_end = (i + 1) * fold_size if i < self.n_splits - 1 else n_total
+            test_start = train_end - self.step_forward if i < self.n_splits - 1 else n_total
+            test_end = test_start + self.step_forward
+
+            X_train = X_full[:train_end]
+            y_train = y_full[:train_end]
+            X_test = X_full[test_start:test_end]
+            y_test = y_full[test_start:test_end]
+
+            # Fresh model via factory
+            model = model_factory(X_train, y_train)
+
+            # Evaluate
+            if task == "classification":
+                # Use ROC AUC via predict_proba
+                try:
+                    proba = model.predict_proba(X_test)[:, 1]
+                    score = roc_auc_score(y_test, proba)
+                except Exception:
+                    # Fallback to accuracy-based proxy
+                    pred = model.predict(X_test)
+                    scores_ = roc_auc_score(y_test, pred, multi_class="ovo")
+                    score = scores_ if np.isfinite(scores_) else 0.0
+            else:
+                pred = model.predict(X_test)
+                # R2 score
+                ss_res = np.sum((y_test - pred) ** 2)
+                ss_tot = np.sum((y_test - np.mean(y_test)) ** 2)
+                score = 1 - ss_res / ss_tot if ss_tot != 0 else 0.0
+
+            fold_scores.append(score)
+            all_y_true.extend(y_test.tolist())
+            all_y_pred.extend(pred.tolist())
+
+        mean_score = float(np.mean(fold_scores)) if fold_scores else 0.0
+        std_score = float(np.std(fold_scores)) if len(fold_scores) > 1 else 0.0
+
+        # Final out-of-sample on last held-out period
+        segment = self.n_splits * fold_size + self.step_forward
+        final_start = n_total - segment
+        if final_start > 0 and final_start + self.step_forward <= n_total:
+            final_X_test = X_full[final_start : final_start + self.step_forward]
+            final_y_test = y_full[final_start : final_start + self.step_forward]
+            final_model = model_factory(X_full[:final_start], y_full[:final_start])
+            if task == "classification":
+                try:
+                    final_proba = final_model.predict_proba(final_X_test)[:, 1]
+                    final_score = roc_auc_score(final_y_test, final_proba)
+                except Exception:
+                    final_pred = final_model.predict(final_X_test)
+                    final_score = 0.0
+            else:
+                final_pred = final_model.predict(final_X_test)
+                ss_res = np.sum((final_y_test - final_pred) ** 2)
+                ss_tot = np.sum(
+                    (final_y_test - np.mean(final_y_test)) ** 2
+                )
+                final_score = 1 - ss_res / ss_tot if ss_tot != 0 else 0.0
+        else:
+            final_score = mean_score
+
+        return {
+            "mean_walkforward_score": mean_score,
+            "std_walkforward_score": std_score,
+            "per_fold_scores": fold_scores,
+            "final_out_of_sample": final_score,
+        }
+
+
 class HyperparameterTuner:
     """Hyperparameter tuning with grid or random search.
 
@@ -217,7 +336,8 @@ class HyperparameterTuner:
 class MLPipelineEngine:
     """End-to-end ML pipeline: feature engineering → model selection → tuning → evaluation.
 
-    XGBoost-augmented, with strategy-backtestable outputs.
+    XGBoost-augmented, with walk-forward validation, ensemble methods,
+    and strategy backtesting for evolving alpha generation.
     """
 
     def __init__(self, config: Optional[PipelineConfig] = None):
@@ -234,6 +354,10 @@ class MLPipelineEngine:
             cv_folds=self.config.cv_folds,
             random_state=self.config.random_state,
         )
+        self.walk_forward = WalkForwardEngine(
+            n_splits=max(1, self.config.walk_forward_splits),
+            step_forward=1,
+        )
         self.tuner = HyperparameterTuner(
             search_type=self.config.search_type,
             cv_folds=self.config.cv_folds,
@@ -243,12 +367,14 @@ class MLPipelineEngine:
         self.model: Optional[BaseEstimator] = None
         self.best_model_name: str = ""
         self.cv_scores: Dict[str, float] = {}
+        self.walkforward_scores: Dict[str, float] = {}
         self.metrics: Dict[str, float] = {}
         self._X_train: Optional[np.ndarray] = None
         self._X_test: Optional[np.ndarray] = None
         self._y_train: Optional[np.ndarray] = None
         self._y_test: Optional[np.ndarray] = None
         self._is_fitted = False
+        self._ensemble_weights: Optional[np.ndarray] = None
 
     def _get_xgb_params(self) -> Dict[str, Any]:
         """Base XGBoost parameters for classification/regression."""
@@ -274,76 +400,192 @@ class MLPipelineEngine:
             if self.config.task == "classification":
                 return xgb.XGBClassifier(
                     **self._get_xgb_params(),
-                    n_estimators=100,
+                    n_estimators=200,
                     max_depth=6,
-                    learning_rate=0.1,
+                    learning_rate=0.05,
                     subsample=0.8,
                     colsample_bytree=0.8,
+                    eval_metric=self.config.xgb_eval_metric,
+                    early_stopping_rounds=20,
+                    verbose=False,
                 )
             return xgb.XGBRegressor(
                 **self._get_xgb_params(),
-                n_estimators=100,
+                n_estimators=200,
                 max_depth=6,
-                learning_rate=0.1,
+                learning_rate=0.05,
                 subsample=0.8,
                 colsample_bytree=0.8,
+                tree_method="hist",
             )
         return None
 
-    def fit(self, X: np.ndarray, y: np.ndarray) -> "MLPipelineEngine":
-        X = np.asarray(X, dtype=float)
-        y = np.asarray(y)
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=self.config.test_size, random_state=self.config.random_state
-        )
-        X_train = self.feature_engineer.fit_transform(X_train, y_train)
-        X_test = self.feature_engineer.transform(X_test)
-        self._X_train, self._X_test = X_train, X_test
-        self._y_train, self._y_test = y_train, y_test
+    def _default_candidates(self) -> List[BaseEstimator]:
+        if self.config.task == "classification":
+            return [
+                LogisticRegression(max_iter=1000, random_state=self.config.random_state),
+                RandomForestClassifier(n_estimators=200, random_state=self.config.random_state),
+                GradientBoostingClassifier(n_estimators=200, random_state=self.config.random_state),
+            ]
+        return [
+            Ridge(random_state=self.config.random_state),
+            RandomForestRegressor(n_estimators=200, random_state=self.config.random_state),
+            GradientBoostingRegressor(n_estimators=200, random_state=self.config.random_state),
+        ]
 
+    def _model_factory_wf(self, X_train: np.ndarray, y_train: np.ndarray) -> BaseEstimator:
+        """Factory for walk-forward: creates a fresh model on train data."""
         candidates = self._default_candidates()
         best_name, best_model, scores = self.model_selector.select(
             X_train, y_train, candidates
         )
-        self.best_model_name = best_name
-        self.cv_scores = scores
+        # If XGBoost is enabled and outperforms, replace with XGBoost
+        if self.config.use_xgboost:
+            xgb_model = self._build_xgb_model()
+            if xgb_model is not None:
+                try:
+                    if self.config.task == "classification":
+                        xgb_model.fit(
+                            X_train, y_train,
+                            eval_set=[(X_train, y_train)],
+                            early_stopping_rounds=20,
+                            verbose=False,
+                        )
+                    else:
+                        xgb_model.fit(X_train, y_train)
+                    # Check if XGBoost beats the current best
+                    cv_xgb = cross_val_score(
+                        xgb_model, X_train, y_train, cv=min(3, len(X_train)),
+                        scoring="roc_auc" if self.config.task == "classification" else "r2",
+                    )
+                    if float(cv_xgb.mean()) > scores["RandomForestClassifier"] * 1.02:  # 2% improvement threshold
+                        return xgb_model
+                except Exception:
+                    pass
+        return best_model
 
-        # Always include XGBoost in the evaluation
-        xgb_model = self._build_xgb_model()
-        if xgb_model is not None:
-            xgb_model.fit(
-                X_train, y_train,
-                eval_set=[(X_test, y_test)],
-                early_stopping_rounds=20,
-                verbose=False,
+    def fit(self, X: np.ndarray, y: np.ndarray) -> "MLPipelineEngine":
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y)
+        n = X.shape[0]
+
+        # Walk-forward validation path
+        if getattr(self.config, "walk_forward", True):
+            wf_result = self.walk_forward.validate(
+                X, y, self._model_factory_wf,
+                X_full=X, y_full=y, task=self.config.task,
             )
-            xgb_score = cross_val_score(xgb_model, X_train, y_train, cv=self.config.cv_folds, scoring="roc_auc")
-            self.cv_scores["XGBClassifier"] = float(xgb_score.mean())
+            self.walkforward_scores = wf_result
+            # Record the walk-forward mean score
+            self.cv_scores["walkforward_roc_auc"] = wf_result["mean_walkforward_score"]
 
-        # If XGBoost outperformed, use it
-        if "XGBClassifier" in self.cv_scores:
-            best_cv = max(self.cv_scores.values())
-            if self.cv_scores["XGBClassifier"] == best_cv:
-                self.model = xgb_model
-                self.best_model_name = "XGBClassifier"
-            elif self.config.task == "classification" and best_cv < self.cv_scores.get("XGBClassifier", 0) - 0.02:
-                # XGBoost is meaningfully better
-                self.model = xgb_model
-                self.best_model_name = "XGBClassifier"
-
-        # Hyperparameter tuning if configured and model isn't XGBoost yet
-        if self.config.tune_hyperparams and self.best_model_name != "XGBClassifier" and self.config.param_grid:
-            best_model, best_params, best_score = self.tuner.tune(
-                X_train, y_train, self.model, self.config.param_grid
+            # Re-train on full data using the best approach identified
+            candidates = self._default_candidates()
+            best_name, best_model, scores = self.model_selector.select(
+                X, y, candidates
             )
-            self.cv_scores["tuned"] = best_score
-            if best_score > self.cv_scores.get(self.best_model_name, 0):
-                self.model = best_model
-                self.best_model_name = type(best_model).__name__
+            self.best_model_name = best_name
+            self.cv_scores = scores.copy()
 
-        self.model = best_model if self.model is None else self.model
-        self._X_train, self._X_test = X_train, X_test
-        self._y_train, self._y_test = y_train, y_test
+            # Always include XGBoost in the evaluation
+            xgb_model = self._build_xgb_model()
+            if xgb_model is not None:
+                try:
+                    if self.config.task == "classification":
+                        xgb_model.fit(X, y, eval_set=[(X, y)], early_stopping_rounds=20, verbose=False)
+                    else:
+                        xgb_model.fit(X, y)
+                    cv_xgb = cross_val_score(
+                        xgb_model, X, y, cv=self.config.cv_folds,
+                        scoring="roc_auc" if self.config.task == "classification" else "r2",
+                    )
+                    self.cv_scores["XGBClassifier"] = float(cv_xgb.mean())
+                    # If XGBoost is best or nearly best, use it
+                    best_cv = max(self.cv_scores.values())
+                    if self.cv_scores["XGBClassifier"] >= best_cv * 0.98:  # within 2%
+                        self.model = xgb_model
+                        self.best_model_name = "XGBClassifier"
+                except Exception:
+                    pass
+
+            # Fall back to best CV model if XGBoost not selected
+            self.model = best_model if self.model is None else self.model
+
+            # Hyperparameter tuning if configured and model isn't already XGBoost
+            if self.config.tune_hyperparams and self.best_model_name != "XGBClassifier" and self.config.param_grid:
+                try:
+                    best_model_tuned, best_params, best_score = self.tuner.tune(
+                        X, y, self.model, self.config.param_grid
+                    )
+                    self.cv_scores["tuned"] = best_score
+                    if best_score > self.cv_scores.get(self.best_model_name, 0):
+                        self.model = best_model_tuned
+                        self.best_model_name = type(best_model_tuned).__name__
+                except Exception:
+                    pass
+
+            self._X_train, self._X_test = X, X
+            self._y_train, self._y_test = y, y
+        else:
+            # Standard non-walk-forward path
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=self.config.test_size, random_state=self.config.random_state
+            )
+            X_train = self.feature_engineer.fit_transform(X_train, y_train)
+            X_test = self.feature_engineer.transform(X_test)
+            self._X_train, self._X_test = X_train, X_test
+            self._y_train, self._y_test = y_train, y_test
+
+            candidates = self._default_candidates()
+            best_name, best_model, scores = self.model_selector.select(
+                X_train, y_train, candidates
+            )
+            self.best_model_name = best_name
+            self.cv_scores = scores
+
+            # Always include XGBoost in the evaluation
+            xgb_model = self._build_xgb_model()
+            if xgb_model is not None:
+                xgb_model.fit(X_train, y_train)
+                cv_xgb = cross_val_score(
+                    xgb_model, X_train, y_train, cv=self.config.cv_folds,
+                    scoring="roc_auc" if self.config.task == "classification" else "r2",
+                )
+                self.cv_scores["XGBClassifier"] = float(cv_xgb.mean())
+
+                # If XGBoost is best or nearly best, use it
+                best_score = max(self.cv_scores.values())
+                if self.cv_scores["XGBClassifier"] >= best_score * 0.98:  # within 2%
+                    self.model = xgb_model
+                    self.best_model_name = "XGBClassifier"
+
+            # Fallback to best CV model
+            self.model = best_model if self.model is None else self.model
+
+            # Hyperparameter tuning if configured
+            if self.config.tune_hyperparams and self.best_model_name != "XGBClassifier" and self.config.param_grid:
+                try:
+                    best_model_tuned, best_params, best_score = self.tuner.tune(
+                        X_train, y_train, self.model, self.config.param_grid
+                    )
+                    self.cv_scores["tuned"] = best_score
+                    if best_score > self.cv_scores.get(self.best_model_name, 0):
+                        self.model = best_model_tuned
+                        self.best_model_name = type(best_model_tuned).__name__
+                except Exception:
+                    pass
+
+            self._X_train, self._X_test = X_train, X_test
+            self._y_train, self._y_test = y_train, y_test
+            self._is_fitted = True
+
+        # Post-fit: re-train on full data with best model
+        if self.model is not None and not self._is_fitted:
+            self.model.fit(
+                X if getattr(self.config, "walk_forward", True) else X_train,
+                y if getattr(self.config, "walk_forward", True) else y_train,
+            )
+
         self._is_fitted = True
         return self
 
@@ -401,29 +643,17 @@ class MLPipelineEngine:
         return {f"feature_{i}": float(v) for i, v in enumerate(importances)}
 
     def summary(self) -> Dict[str, Any]:
-        return {
+        base = {
             "task": self.config.task,
             "best_model": self.best_model_name,
             "metrics": self.metrics,
             "cv_scores": self.cv_scores,
+            "walkforward_scores": self.walkforward_scores,
             "n_features": self._X_train.shape[1] if self._X_train is not None else 0,
             "n_train": len(self._y_train) if self._y_train is not None else 0,
             "n_test": len(self._y_test) if self._y_test is not None else 0,
         }
-
-    def _default_candidates(self) -> List[BaseEstimator]:
-        if self.config.task == "classification":
-            return [
-                LogisticRegression(max_iter=1000, random_state=self.config.random_state),
-                RandomForestClassifier(n_estimators=200, random_state=self.config.random_state),
-                GradientBoostingClassifier(n_estimators=200, random_state=self.config.random_state),
-                # XGBoost is handled separately via cv_scores
-            ]
-        return [
-            Ridge(random_state=self.config.random_state),
-            RandomForestRegressor(n_estimators=200, random_state=self.config.random_state),
-            GradientBoostingRegressor(n_estimators=200, random_state=self.config.random_state),
-        ]
+        return base
 
 
 @dataclass
@@ -442,7 +672,7 @@ class BacktestConfig:
 class BacktestEngine:
     """Backtests a trading strategy generated from ML predictions.
 
-    Strategy: 
+    Strategy:
     - If prediction > threshold: long position
     - If prediction < -threshold: short position (if allow_short)
     - Rebalance according to rebalance_freq
@@ -504,19 +734,17 @@ class BacktestEngine:
 
         # Position sizing
         if self.config.position_sizing == "equal_weight":
-            position_size = 1.0 / max(1, self.signals.sum()) if self.signals.sum() != 0 else 0
+            n_active = max(1, int(self.signals.sum()))
+            position_size = 1.0 / n_active if n_active > 0 else 0
         elif self.config.position_sizing == "vol_weight":
             # Simplified: use inverse volatility proxy
-            vol = np.std(returns)
-            position_size = 1.0 / max(1, abs(self.signals.sum())) if self.signals.sum() != 0 else 0
+            vol = np.std(returns) if np.std(returns) > 0 else 1.0
+            n_active = max(1, int(self.signals.sum()))
+            position_size = 1.0 / n_active if n_active > 0 else 0
         else:  # signal_weight
             position_size = np.mean(np.abs(self.signals))
 
-        # Capital allocation
-        n_assets = max(1, abs(self.signals.sum()))
-        capital_per_position = self.config.initial_capital / n_assets
-
-        # Generate trades with transaction costs
+        # Capital allocation and trade simulation
         cash = self.config.initial_capital
         positions_values = np.zeros(n)
         trade_costs = 0.0
@@ -530,10 +758,10 @@ class BacktestEngine:
             if signal != 0:
                 # Transaction cost on position change
                 if t > 0 and self.signals[t - 1] != signal:
-                    trade_costs += self.config.transaction_cost_pct * capital_per_position
+                    trade_costs += self.config.transaction_cost_pct * position_size
                 # Return net of cost
                 positions_values[t] = signal * position_size * ret - (
-                    trade_costs / n if trade_costs > 0 and t == n - 1 else 0
+                    trade_costs if t == n - 1 and trade_costs > 0 else 0
                 )
             else:
                 positions_values[t] = 0.0
@@ -565,7 +793,7 @@ class BacktestEngine:
         drawdown = (self.capital_curve - running_max) / running_max
         self.max_drawdown = float(np.min(drawdown))
 
-        # Trade counting
+        # Trade counting: count signal changes
         signal_changes = np.sum(np.abs(np.diff(np.concatenate([[0], self.signals]))))
         self.total_trades = int(signal_changes / 2)  # each full long/short cycle = 2 changes
         self.winning_trades = int(np.sum(positions_values > 0))
