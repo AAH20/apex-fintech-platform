@@ -25,6 +25,7 @@
 | [`src/risk/aggregation.py`](src/risk/aggregation.py) | VaR/CVaR bounds via rearrangement algorithm (100 risks, <2s) |
 | [`src/payments/routing.py`](src/payments/routing.py) | Optimal payment path finder (1000 nodes, <100ms) |
 | [`src/simulation/engine.py`](src/simulation/engine.py) | Monte Carlo engine with LSM for American options (10K paths, <1s) |
+| [`src/ml/pipeline.py`](src/ml/pipeline.py) | **ML pipeline** — XGBoost-augmented feature engineering, model selection, hyperparameter tuning, **strategy backtesting** with SHARP/MDD guards |
 
 ## 🏗 High-Level Architecture
 
