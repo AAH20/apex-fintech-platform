@@ -126,9 +126,9 @@ class SignalRefiner:
         mean_reversion = np.ones(n)
         if len(recent_returns) > 0:
             # Simple proxy: use overall mean reversion speed
-            mean_reversion = 1 - self.mean_reversion_speed * np.sign(
-                np.concatenate([[0], predictions * returns])
-            )
+            # Sign of prediction*return: same sign -> dampen, opposite -> amplify
+            signal_return_product = predictions * returns
+            mean_reversion = 1 - self.mean_reversion_speed * np.sign(signal_return_product)
 
         # 4. Momentum filter
         momentum = self._compute_momentum(predictions, self.momentum_lookback)
